@@ -9,6 +9,7 @@ import 'package:town_pass/gen/assets.gen.dart';
 import 'package:town_pass/util/tp_app_bar.dart';
 import 'package:town_pass/util/tp_colors.dart';
 import 'package:town_pass/util/web_message_handler/tp_web_message_listener.dart';
+import 'package:town_pass/page/sync_test/webview_push_service.dart';
 
 class WebViewArgument {
   final String? url;
@@ -255,7 +256,31 @@ class TPInAppWebView extends StatelessWidget {
     return InAppWebView(
       onWebViewCreated: (controller) async {
         await controller.addWebMessageListener(TPWebMessageListener.webMessageListener());
+
+        // 註冊 WebView 到推送服務
+        try {
+          if (Get.isRegistered<WebViewPushService>()) {
+            Get.find<WebViewPushService>().registerWebView(controller);
+            debugPrint('WebView registered to push service');
+          }
+        } catch (e) {
+          debugPrint('Failed to register WebView to push service: $e');
+        }
+
         onWebViewCreated?.call(controller);
+      },
+      onLoadStop: (controller, url) async {
+        // 確保 WebView 完全載入後再註冊（以防 onWebViewCreated 時服務還沒準備好）
+        try {
+          if (Get.isRegistered<WebViewPushService>()) {
+            Get.find<WebViewPushService>().registerWebView(controller);
+          }
+        } catch (e) {
+          debugPrint('Failed to register WebView on load stop: $e');
+        }
+
+        // 呼叫原本的 onLoadStop callback
+        onLoadStop?.call(controller, url);
       },
       gestureRecognizers: gestureRecognizers,
       windowId: windowId,
@@ -289,7 +314,19 @@ class TPInAppWebView extends StatelessWidget {
       onLoadResource: onLoadResource,
       onLoadResourceWithCustomScheme: onLoadResourceWithCustomScheme,
       onLoadStart: onLoadStart,
-      onLoadStop: onLoadStop,
+      // onLoadStop 已在上面處理，包含了 WebView 註冊邏輯
+      onWebContentProcessDidTerminate: (controller) {
+        // WebView 進程終止時，取消註冊
+        try {
+          if (Get.isRegistered<WebViewPushService>()) {
+            Get.find<WebViewPushService>().unregisterWebView(controller);
+            debugPrint('WebView unregistered from push service (terminated)');
+          }
+        } catch (e) {
+          debugPrint('Failed to unregister WebView on terminate: $e');
+        }
+        onWebContentProcessDidTerminate?.call(controller);
+      },
       onLongPressHitTestResult: onLongPressHitTestResult,
       onPrintRequest: onPrintRequest,
       onProgressChanged: onProgressChanged,
@@ -321,7 +358,7 @@ class TPInAppWebView extends StatelessWidget {
       onRenderProcessResponsive: onRenderProcessResponsive,
       onRenderProcessUnresponsive: onRenderProcessUnresponsive,
       onSafeBrowsingHit: onSafeBrowsingHit,
-      onWebContentProcessDidTerminate: onWebContentProcessDidTerminate,
+      // onWebContentProcessDidTerminate 已在上面處理（line 318）
       shouldAllowDeprecatedTLS: shouldAllowDeprecatedTLS,
       shouldInterceptRequest: shouldInterceptRequest,
       onCameraCaptureStateChanged: onCameraCaptureStateChanged,

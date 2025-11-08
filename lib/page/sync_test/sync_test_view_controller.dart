@@ -9,6 +9,7 @@ import 'package:town_pass/service/geo_locator_service.dart';
 import 'package:town_pass/service/notification_service.dart';
 import 'package:town_pass/page/sync_test/debug_log/debug_log_view_controller.dart';
 import 'package:town_pass/page/sync_test/models/debug_log.dart';
+import 'package:town_pass/page/sync_test/webview_push_service.dart';
 
 enum UserMode { pedestrian, bicycle, vehicle }
 
@@ -75,16 +76,18 @@ class SyncTestViewController extends GetxController {
   final RxList<SyncMessage> messages = <SyncMessage>[].obs;
   final RxBool isDemoMode = false.obs;
   final RxBool isSyncing = false.obs;
+  final RxBool syncEnabled = true.obs;
   final RxBool enableNotifications = true.obs;
   final Rx<Position?> currentPosition = Rx<Position?>(null);
   final RxString lastSyncTime = ''.obs;
+  final RxInt syncIntervalMs = 2000.obs;
 
   Timer? _syncTimer;
   http.Client? _httpClient;
   CancelableOperation? _currentRequest;
 
   static const String apiEndpoint = 'https://tmp114514.ricecall.com/interact';
-  static const Duration syncInterval = Duration(seconds: 2);
+  Duration get syncInterval => Duration(milliseconds: syncIntervalMs.value);
 
   @override
   void onInit() {
@@ -93,6 +96,11 @@ class SyncTestViewController extends GetxController {
     _startSync();
     _getCurrentLocation();
     _requestNotificationPermission();
+
+    // Initialize WebView push service if not already initialized
+    if (!Get.isRegistered<WebViewPushService>()) {
+      Get.put(WebViewPushService());
+    }
   }
 
   Future<void> _requestNotificationPermission() async {
@@ -152,7 +160,7 @@ class SyncTestViewController extends GetxController {
   }
 
   Future<void> _syncWithBackend() async {
-    if (isSyncing.value || isDemoMode.value) return;
+    if (!syncEnabled.value || isSyncing.value || isDemoMode.value) return;
 
     await _getCurrentLocation();
 
@@ -184,6 +192,18 @@ class SyncTestViewController extends GetxController {
       debugPrint('Debug log controller not found: $e');
     }
 
+    // Push request to WebView
+    try {
+      final pushService = Get.find<WebViewPushService>();
+      await pushService.pushRequest(
+        url: apiEndpoint,
+        method: 'PUT',
+        body: requestData,
+      );
+    } catch (e) {
+      debugPrint('WebView push service not found: $e');
+    }
+
     try {
       final response = await _httpClient!.put(
         Uri.parse(apiEndpoint),
@@ -212,6 +232,17 @@ class SyncTestViewController extends GetxController {
         );
       } catch (e) {
         debugPrint('Debug log controller not found: $e');
+      }
+
+      // Push response to WebView
+      try {
+        final pushService = Get.find<WebViewPushService>();
+        await pushService.pushResponse(
+          statusCode: response.statusCode,
+          body: response.body,
+        );
+      } catch (e) {
+        debugPrint('WebView push service not found: $e');
       }
 
       if (response.statusCode == 200) {
@@ -282,6 +313,9 @@ class SyncTestViewController extends GetxController {
       // 觸發提醒
       _triggerAlert(message);
 
+      // Push message to WebView
+      _pushMessageToWebView(message);
+
       return;
     }
 
@@ -308,6 +342,9 @@ class SyncTestViewController extends GetxController {
 
         // 觸發提醒
         _triggerAlert(message);
+
+        // Push message to WebView
+        _pushMessageToWebView(message);
       }
 
       return;
@@ -439,6 +476,46 @@ class SyncTestViewController extends GetxController {
 
   void clearMessages() {
     messages.clear();
+  }
+
+  void setSyncInterval(int intervalMs) {
+    if (intervalMs < 100) {
+      debugPrint('Interval too short, setting to 100ms');
+      intervalMs = 100;
+    }
+
+    syncIntervalMs.value = intervalMs;
+
+    // 重新啟動計時器
+    _syncTimer?.cancel();
+    _startSync();
+
+    debugPrint('Sync interval set to ${intervalMs}ms');
+  }
+
+  void toggleSyncEnabled(bool enabled) {
+    syncEnabled.value = enabled;
+    debugPrint('Sync enabled: $enabled');
+  }
+
+  Future<void> _pushMessageToWebView(SyncMessage message) async {
+    try {
+      final pushService = Get.find<WebViewPushService>();
+      await pushService.pushMessage({
+        'id': message.id,
+        'type': message.type,
+        'targetModes': message.targetModes.map((m) => m.name).toList(),
+        'priority': message.priority,
+        'title': message.title,
+        'content': message.content,
+        'timestamp': message.timestamp,
+        'icon': message.icon,
+        'alertMethod': message.alertMethod,
+        'vibrationPattern': message.vibrationPattern,
+      });
+    } catch (e) {
+      debugPrint('Failed to push message to WebView: $e');
+    }
   }
 
   String getModeLabel(UserMode mode) {

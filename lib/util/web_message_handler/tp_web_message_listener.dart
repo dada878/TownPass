@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:town_pass/util/web_message_handler/tp_web_message_handler.dart';
+import 'package:town_pass/util/web_message_handler/sync_test_message_handler.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 abstract class TPWebMessageListener {
@@ -14,6 +15,14 @@ abstract class TPWebMessageListener {
         OpenLinkMessageHandler(),
         NotifyMessageHandler(),
         QRCodeScanMessageHandler(),
+        // Sync Test Handlers
+        SyncTestSetModeMessageHandler(),
+        SyncTestSetSyncIntervalMessageHandler(),
+        SyncTestToggleSyncMessageHandler(),
+        SyncTestGetStateMessageHandler(),
+        SyncTestClearMessagesMessageHandler(),
+        SyncTestToggleDemoMessageHandler(),
+        SyncTestToggleNotificationsMessageHandler(),
       ];
 
   static WebMessageListener webMessageListener() {

@@ -28,6 +28,7 @@ enum MyServiceItemId {
   essentialGoods,
   library,
   locationSearch,
+  syncControl,
   zoo,
   ;
 }
@@ -175,6 +176,19 @@ extension MyServiceIdExt on MyServiceItemId {
           icon: Assets.svg.iconLocationSearch24.svg(),
           category: MyServiceCategory.explore,
           destinationUrl: 'https://taipei-pass-service.vercel.app/surrounding-service/',
+        ),
+      MyServiceItemId.syncControl => MyServiceItem(
+          title: '同步控制台',
+          description: 'WebView 同步功能測試控制台',
+          icon: Assets.svg.iconLocationSearch24.svg(),
+          category: MyServiceCategory.explore,
+          // 開發環境：使用 localhost
+          // destinationUrl: 'http://localhost:3001/sync-control',
+          // 或使用電腦 IP（真機測試）
+          // destinationUrl: 'http://192.168.1.100:3001/sync-control',
+          // 或直接導航到 Flutter 頁面
+          destinationUrl: 'http://169.254.244.233:3001/sync-control',
+          forceWebViewTitle: '同步控制台',
         ),
       MyServiceItemId.zoo => MyServiceItem(
           title: '愛遊動物園',
