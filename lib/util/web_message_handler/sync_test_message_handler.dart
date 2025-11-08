@@ -19,11 +19,21 @@ class SyncTestSetModeMessageHandler extends TPWebMessageHandler {
     required bool isMainFrame,
     required Function(WebMessage reply)? onReply,
   }) async {
+    debugPrint('=== SyncTestSetModeMessageHandler ===');
+    debugPrint('Received message: $message');
+    debugPrint('Message type: ${message.runtimeType}');
+    debugPrint('Source origin: $sourceOrigin');
+    debugPrint('Is main frame: $isMainFrame');
+    debugPrint('onReply callback: ${onReply != null ? "provided" : "null"}');
+
     try {
       final controller = Get.find<SyncTestViewController>();
 
       if (message == null || message is! String) {
-        onReply?.call(replyWebMessage(data: {'success': false, 'error': 'Invalid mode'}));
+        debugPrint('Invalid message type, sending error reply');
+        final errorReply = replyWebMessage(data: {'success': false, 'error': 'Invalid mode'});
+        debugPrint('Error reply WebMessage: ${errorReply.data}');
+        onReply?.call(errorReply);
         return;
       }
 
@@ -39,15 +49,27 @@ class SyncTestSetModeMessageHandler extends TPWebMessageHandler {
           mode = UserMode.vehicle;
           break;
         default:
-          onReply?.call(replyWebMessage(data: {'success': false, 'error': 'Unknown mode'}));
+          debugPrint('Unknown mode: $message, sending error reply');
+          final errorReply = replyWebMessage(data: {'success': false, 'error': 'Unknown mode'});
+          debugPrint('Error reply WebMessage: ${errorReply.data}');
+          onReply?.call(errorReply);
           return;
       }
 
+      debugPrint('Setting mode to: ${mode.name}');
       controller.toggleMode(mode);
-      onReply?.call(replyWebMessage(data: {'success': true, 'mode': message}));
+
+      final successReply = replyWebMessage(data: {'success': true, 'mode': message});
+      debugPrint('Success reply WebMessage type: ${successReply.type}');
+      debugPrint('Success reply WebMessage data: ${successReply.data}');
+      debugPrint('Calling onReply with success response');
+      onReply?.call(successReply);
+      debugPrint('onReply called successfully');
     } catch (e) {
       debugPrint('SyncTestSetModeMessageHandler error: $e');
-      onReply?.call(replyWebMessage(data: {'success': false, 'error': e.toString()}));
+      debugPrint('Stack trace: ${StackTrace.current}');
+      final errorReply = replyWebMessage(data: {'success': false, 'error': e.toString()});
+      onReply?.call(errorReply);
     }
   }
 }
