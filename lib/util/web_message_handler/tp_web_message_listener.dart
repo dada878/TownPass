@@ -33,16 +33,30 @@ abstract class TPWebMessageListener {
           return;
         }
 
-        final Map dataMap = jsonDecode(webMessage.data);
-        for (TPWebMessageHandler handler in messageHandler) {
-          if (handler.name == dataMap['name']) {
-            await handler.handle(
-              message: dataMap['data'],
-              sourceOrigin: sourceOrigin,
-              isMainFrame: isMainFrame,
-              onReply: (reply) => replyProxy.postMessage(reply),
-            );
+        try {
+          final Map dataMap = jsonDecode(webMessage.data);
+          final String handlerName = dataMap['name'] as String;
+
+          // 尋找對應的 handler
+          for (TPWebMessageHandler handler in messageHandler) {
+            if (handler.name == handlerName) {
+              await handler.handle(
+                message: dataMap['data'],
+                sourceOrigin: sourceOrigin,
+                isMainFrame: isMainFrame,
+                onReply: (reply) {
+                  replyProxy.postMessage(reply);
+                },
+              );
+              // 找到並處理完成後就跳出
+              return;
+            }
           }
+
+          // 如果沒有找到對應的 handler
+          print('Warning: No handler found for: $handlerName');
+        } catch (e) {
+          print('Error in webMessageListener: $e');
         }
       },
     );

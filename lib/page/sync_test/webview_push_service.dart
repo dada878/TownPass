@@ -5,18 +5,33 @@ import 'package:get/get.dart';
 
 /// Service for pushing events from Flutter to WebView
 class WebViewPushService extends GetxService {
-  final RxSet<InAppWebViewController> _webViewControllers = <InAppWebViewController>{}.obs;
+  final RxMap<int, InAppWebViewController> _webViewControllers = <int, InAppWebViewController>{}.obs;
 
   /// Register a WebView controller to receive push events
   void registerWebView(InAppWebViewController controller) {
-    _webViewControllers.add(controller);
-    debugPrint('WebView registered. Total: ${_webViewControllers.length}');
+    final hash = controller.hashCode;
+
+    // 檢查是否已經註冊過（避免重複）
+    if (_webViewControllers.containsKey(hash)) {
+      debugPrint('WebView already registered (hash: $hash), skipping');
+      return;
+    }
+
+    // 清除所有舊的 WebView controllers（因為同時只會有一個同步控制台）
+    if (_webViewControllers.isNotEmpty) {
+      debugPrint('Clearing ${_webViewControllers.length} old WebView controller(s) before registering new one');
+      _webViewControllers.clear();
+    }
+
+    _webViewControllers[hash] = controller;
+    debugPrint('WebView registered (hash: $hash). Total: ${_webViewControllers.length}');
   }
 
   /// Unregister a WebView controller
   void unregisterWebView(InAppWebViewController controller) {
-    _webViewControllers.remove(controller);
-    debugPrint('WebView unregistered. Total: ${_webViewControllers.length}');
+    final hash = controller.hashCode;
+    _webViewControllers.remove(hash);
+    debugPrint('WebView unregistered (hash: $hash). Total: ${_webViewControllers.length}');
   }
 
   /// Push a request event to all registered WebViews
@@ -85,24 +100,24 @@ class WebViewPushService extends GetxService {
         })();
       ''';
 
-      final controllersToRemove = <InAppWebViewController>[];
+      final hashesToRemove = <int>[];
 
-      for (final controller in _webViewControllers.toList()) {
+      for (final entry in _webViewControllers.entries.toList()) {
         try {
           // 加上 timeout 防止卡住
-          await controller.evaluateJavascript(source: script)
+          await entry.value.evaluateJavascript(source: script)
               .timeout(const Duration(milliseconds: 500));
-          debugPrint('Pushed $eventType to WebView');
+          debugPrint('Pushed $eventType to WebView (hash: ${entry.key})');
         } catch (e) {
-          debugPrint('Failed to push $eventType to WebView: $e');
-          // 標記要移除的 controller
-          controllersToRemove.add(controller);
+          debugPrint('Failed to push $eventType to WebView (hash: ${entry.key}): $e');
+          // 標記要移除的 hash
+          hashesToRemove.add(entry.key);
         }
       }
 
       // 清理失效的 controllers
-      for (final controller in controllersToRemove) {
-        _webViewControllers.remove(controller);
+      for (final hash in hashesToRemove) {
+        _webViewControllers.remove(hash);
       }
     } catch (e) {
       debugPrint('Error in _pushEvent: $e');

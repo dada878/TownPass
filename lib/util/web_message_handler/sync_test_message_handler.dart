@@ -167,7 +167,11 @@ class SyncTestGetStateMessageHandler extends TPWebMessageHandler {
       debugPrint('=== JSON output (first 500 chars) ===');
       debugPrint(jsonString.substring(0, jsonString.length > 500 ? 500 : jsonString.length));
 
-      onReply?.call(replyWebMessage(data: state));
+      debugPrint('=== Calling onReply with state data ===');
+      final reply = replyWebMessage(data: state);
+      debugPrint('=== Reply message created ===');
+      onReply?.call(reply);
+      debugPrint('=== onReply called successfully ===');
     } catch (e) {
       debugPrint('SyncTestGetStateMessageHandler error: $e');
       debugPrint('Stack trace: ${StackTrace.current}');
