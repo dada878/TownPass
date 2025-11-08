@@ -4,6 +4,7 @@ import 'package:town_pass/page/bill/bill_view.dart';
 import 'package:town_pass/page/city_service/city_service_view.dart';
 import 'package:town_pass/page/home/home_view.dart';
 import 'package:town_pass/page/perk/perk_view.dart';
+import 'package:town_pass/page/sync_test/sync_test_view.dart';
 import 'package:town_pass/util/extension/svg_gen_image.dart';
 
 class TPBottomNavigationFactory {
@@ -24,6 +25,10 @@ class TPBottomNavigationFactory {
           icon: Assets.svg.iconTabbarAccountDefault.icon(),
           label: '帳務',
         ),
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.sync),
+          label: '測試',
+        ),
       ];
 
   static List<Widget> get viewList => [
@@ -31,6 +36,7 @@ class TPBottomNavigationFactory {
         const HomeView(),
         const PerkView(),
         const BillView(),
+        const SyncTestView(),
       ];
 
   /// default to "Home" page (index = 1)

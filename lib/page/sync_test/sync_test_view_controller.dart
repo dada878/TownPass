@@ -1,0 +1,477 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
+import 'package:vibration/vibration.dart';
+import 'package:town_pass/service/geo_locator_service.dart';
+import 'package:town_pass/service/notification_service.dart';
+import 'package:town_pass/page/sync_test/debug_log/debug_log_view_controller.dart';
+import 'package:town_pass/page/sync_test/models/debug_log.dart';
+
+enum UserMode { pedestrian, bicycle, vehicle }
+
+class SyncMessage {
+  final String id;
+  final String type;
+  final List<UserMode> targetModes;
+  final String priority;
+  final String title;
+  final String content;
+  final int timestamp;
+  final String? icon;
+  final String alertMethod;
+  final String vibrationPattern;
+
+  SyncMessage({
+    required this.id,
+    required this.type,
+    required this.targetModes,
+    required this.priority,
+    required this.title,
+    required this.content,
+    required this.timestamp,
+    this.icon,
+    required this.alertMethod,
+    required this.vibrationPattern,
+  });
+
+  factory SyncMessage.fromJson(Map<String, dynamic> json) {
+    return SyncMessage(
+      id: json['id'] ?? '',
+      type: json['type'] ?? 'info',
+      targetModes: (json['targetModes'] as List<dynamic>?)
+              ?.map((e) => _parseMode(e.toString()))
+              .toList() ??
+          [],
+      priority: json['priority'] ?? 'low',
+      title: json['title'] ?? '',
+      content: json['content'] ?? '',
+      timestamp: json['timestamp'] ?? DateTime.now().millisecondsSinceEpoch,
+      icon: json['icon'],
+      alertMethod: json['alertMethod'] ?? 'silent',
+      vibrationPattern: json['vibrationPattern'] ?? 'none',
+    );
+  }
+
+  static UserMode _parseMode(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'pedestrian':
+        return UserMode.pedestrian;
+      case 'bicycle':
+        return UserMode.bicycle;
+      case 'vehicle':
+        return UserMode.vehicle;
+      default:
+        return UserMode.pedestrian;
+    }
+  }
+}
+
+class SyncTestViewController extends GetxController {
+  final Rx<UserMode> currentMode = UserMode.pedestrian.obs;
+  final RxList<UserMode> receiveModes = <UserMode>[UserMode.pedestrian].obs;
+  final RxList<SyncMessage> messages = <SyncMessage>[].obs;
+  final RxBool isDemoMode = false.obs;
+  final RxBool isSyncing = false.obs;
+  final RxBool enableNotifications = true.obs;
+  final Rx<Position?> currentPosition = Rx<Position?>(null);
+  final RxString lastSyncTime = ''.obs;
+
+  Timer? _syncTimer;
+  http.Client? _httpClient;
+  CancelableOperation? _currentRequest;
+
+  static const String apiEndpoint = 'https://tmp114514.ricecall.com/interact';
+  static const Duration syncInterval = Duration(seconds: 2);
+
+  @override
+  void onInit() {
+    super.onInit();
+    _httpClient = http.Client();
+    _startSync();
+    _getCurrentLocation();
+    _requestNotificationPermission();
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    try {
+      await NotificationService.requestPermission();
+      debugPrint('Notification permission requested');
+    } catch (e) {
+      debugPrint('Failed to request notification permission: $e');
+    }
+  }
+
+  @override
+  void onClose() {
+    _syncTimer?.cancel();
+    _currentRequest?.cancel();
+    _httpClient?.close();
+    super.onClose();
+  }
+
+  void toggleMode(UserMode mode) {
+    currentMode.value = mode;
+    if (!receiveModes.contains(mode)) {
+      receiveModes.add(mode);
+    }
+  }
+
+  void toggleReceiveMode(UserMode mode) {
+    if (receiveModes.contains(mode)) {
+      if (receiveModes.length > 1) {
+        receiveModes.remove(mode);
+      }
+    } else {
+      receiveModes.add(mode);
+    }
+  }
+
+  void toggleDemoMode() {
+    isDemoMode.value = !isDemoMode.value;
+    if (isDemoMode.value) {
+      _addDemoMessage();
+    }
+  }
+
+  void _startSync() {
+    _syncTimer = Timer.periodic(syncInterval, (_) {
+      _syncWithBackend();
+    });
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      final position = await Get.find<GeoLocatorService>().position();
+      currentPosition.value = position;
+    } catch (e) {
+      debugPrint('Error getting location: $e');
+    }
+  }
+
+  Future<void> _syncWithBackend() async {
+    if (isSyncing.value || isDemoMode.value) return;
+
+    await _getCurrentLocation();
+
+    if (currentPosition.value == null) return;
+
+    isSyncing.value = true;
+
+    final requestData = {
+      'lng': currentPosition.value!.longitude,
+      'lat': currentPosition.value!.latitude,
+    };
+    final headers = {'Content-Type': 'application/json'};
+    final startTime = DateTime.now();
+
+    // 記錄 Request
+    try {
+      final debugLogController = Get.find<DebugLogViewController>();
+      debugLogController.addLog(
+        DebugLog(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          timestamp: startTime,
+          type: LogType.request,
+          url: apiEndpoint,
+          requestData: requestData,
+          headers: headers,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Debug log controller not found: $e');
+    }
+
+    try {
+      final response = await _httpClient!.put(
+        Uri.parse(apiEndpoint),
+        headers: headers,
+        body: jsonEncode(requestData),
+      ).timeout(const Duration(seconds: 30));
+
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+
+      lastSyncTime.value = DateTime.now().toString().substring(11, 19);
+
+      // 記錄 Response
+      try {
+        final debugLogController = Get.find<DebugLogViewController>();
+        debugLogController.addLog(
+          DebugLog(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            timestamp: endTime,
+            type: LogType.response,
+            url: apiEndpoint,
+            statusCode: response.statusCode,
+            responseBody: response.body,
+            duration: duration,
+          ),
+        );
+      } catch (e) {
+        debugPrint('Debug log controller not found: $e');
+      }
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _processMessages(data);
+      }
+    } catch (e) {
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+
+      debugPrint('Sync error: $e');
+
+      // 記錄 Error
+      try {
+        final debugLogController = Get.find<DebugLogViewController>();
+        debugLogController.addLog(
+          DebugLog(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            timestamp: endTime,
+            type: LogType.error,
+            url: apiEndpoint,
+            errorMessage: e.toString(),
+            duration: duration,
+          ),
+        );
+      } catch (logError) {
+        debugPrint('Debug log controller not found: $logError');
+      }
+    } finally {
+      isSyncing.value = false;
+    }
+  }
+
+  void _processMessages(Map<String, dynamic> data) {
+    debugPrint('Processing messages from response...');
+    debugPrint('Response data: $data');
+
+    // 檢查新格式: {message: "xxx", lng: 123, lat: 2}
+    if (data['message'] != null && data['message'].toString().isNotEmpty) {
+      final messageContent = data['message'].toString();
+      final lng = data['lng'];
+      final lat = data['lat'];
+
+      debugPrint('Found message in response: $messageContent (lng: $lng, lat: $lat)');
+
+      // 生成訊息 ID（使用時間戳確保每次都是唯一的）
+      final messageId = '${messageContent.hashCode}-${DateTime.now().millisecondsSinceEpoch}';
+
+      // 創建 SyncMessage
+      final message = SyncMessage(
+        id: messageId,
+        type: 'info',
+        targetModes: [currentMode.value], // 使用當前模式
+        priority: 'medium',
+        title: '路況訊息',
+        content: messageContent,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        icon: '📍',
+        alertMethod: 'notification',
+        vibrationPattern: 'normal',
+      );
+
+      debugPrint('Created SyncMessage: ${message.id} - ${message.title}');
+
+      // 加入訊息列表
+      messages.insert(0, message);
+
+      // 觸發提醒
+      _triggerAlert(message);
+
+      return;
+    }
+
+    // 舊格式支援: {messages: [...]}
+    if (data['messages'] != null) {
+      final List<dynamic> messageList = data['messages'] as List<dynamic>;
+      debugPrint('Found ${messageList.length} messages in old format');
+
+      for (var msgData in messageList) {
+        final message = SyncMessage.fromJson(msgData as Map<String, dynamic>);
+        debugPrint('Processing message: ${message.id} - ${message.title}');
+
+        // 檢查是否符合接收模式
+        final hasMatchingMode = message.targetModes.any((mode) => receiveModes.contains(mode));
+        if (!hasMatchingMode) {
+          debugPrint('Message ${message.id} does not match receive modes, skipping');
+          continue;
+        }
+
+        debugPrint('Adding message ${message.id} to list and triggering alert');
+
+        // 加入訊息列表
+        messages.insert(0, message);
+
+        // 觸發提醒
+        _triggerAlert(message);
+      }
+
+      return;
+    }
+
+    debugPrint('No message or messages field in response');
+  }
+
+  void _triggerAlert(SyncMessage message) {
+    debugPrint('Triggering alert for message: ${message.title}');
+
+    // 推送通知
+    _pushNotification(message);
+
+    // 觸發震動
+    if (message.vibrationPattern == 'urgent') {
+      debugPrint('Triggering urgent vibration');
+      _triggerVibration(const [0, 500, 100, 500]);
+    } else if (message.vibrationPattern == 'normal') {
+      debugPrint('Triggering normal vibration');
+      _triggerVibration(const [0, 200]);
+    }
+
+    // 桌面震動模擬
+    if (kIsWeb || defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      debugPrint('Simulating desktop vibration');
+      _simulateDesktopVibration();
+    }
+  }
+
+  Future<void> _pushNotification(SyncMessage message) async {
+    // 檢查是否啟用通知
+    if (!enableNotifications.value) {
+      debugPrint('Notifications disabled, skipping');
+      return;
+    }
+
+    try {
+      // 組合通知標題（包含圖示和標題）
+      final title = message.icon != null
+          ? '${message.icon} ${message.title}'
+          : message.title;
+
+      await NotificationService.showNotification(
+        title: title,
+        content: message.content,
+      );
+
+      debugPrint('Notification sent: ${message.title}');
+    } catch (e) {
+      debugPrint('Failed to send notification: $e');
+    }
+  }
+
+  void toggleNotifications() {
+    enableNotifications.value = !enableNotifications.value;
+  }
+
+  Future<void> testNotification() async {
+    try {
+      await NotificationService.showNotification(
+        title: '🧪 測試通知',
+        content: '這是一則測試通知，如果你看到這個訊息，表示通知功能正常運作。',
+      );
+      debugPrint('Test notification sent');
+    } catch (e) {
+      debugPrint('Failed to send test notification: $e');
+    }
+  }
+
+  Future<void> testVibration() async {
+    try {
+      debugPrint('Testing vibration...');
+      // 觸發震動
+      _triggerVibration(const [0, 300, 200, 300]);
+      debugPrint('Vibration test completed');
+    } catch (e) {
+      debugPrint('Failed to test vibration: $e');
+    }
+  }
+
+  void _triggerVibration(List<int> pattern) async {
+    if (kIsWeb) return;
+
+    try {
+      // 檢查設備是否支援震動
+      final hasVibrator = await Vibration.hasVibrator();
+      if (hasVibrator == true) {
+        // 使用自定義震動模式
+        await Vibration.vibrate(pattern: pattern);
+        debugPrint('Vibration triggered with pattern: $pattern');
+      } else {
+        debugPrint('Device does not support vibration');
+      }
+    } catch (e) {
+      debugPrint('Vibration error: $e');
+    }
+  }
+
+  void _simulateDesktopVibration() {
+    // 桌面震動模擬 - 可以觸發視覺效果或音效
+    debugPrint('Desktop vibration simulated');
+    // 這裡可以發送一個事件，讓 UI 層做視覺震動效果
+  }
+
+  void _addDemoMessage() {
+    debugPrint('Adding demo message...');
+
+    final demoMessage = SyncMessage(
+      id: 'demo-${DateTime.now().millisecondsSinceEpoch}',
+      type: 'danger',
+      targetModes: [currentMode.value],
+      priority: 'high',
+      title: '測試訊息',
+      content: '這是一則測試訊息，用於演示功能',
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      icon: '⚠️',
+      alertMethod: 'modal',
+      vibrationPattern: 'urgent',
+    );
+
+    debugPrint('Demo message created: ${demoMessage.id} - ${demoMessage.title}');
+
+    messages.insert(0, demoMessage);
+    _triggerAlert(demoMessage);
+  }
+
+  void clearMessages() {
+    messages.clear();
+  }
+
+  String getModeLabel(UserMode mode) {
+    switch (mode) {
+      case UserMode.pedestrian:
+        return '行人';
+      case UserMode.bicycle:
+        return '自行車';
+      case UserMode.vehicle:
+        return '車輛';
+    }
+  }
+
+  String getPriorityLabel(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return '高';
+      case 'medium':
+        return '中';
+      case 'low':
+        return '低';
+      default:
+        return priority;
+    }
+  }
+}
+
+class CancelableOperation {
+  bool _isCanceled = false;
+
+  bool get isCanceled => _isCanceled;
+
+  void cancel() {
+    _isCanceled = true;
+  }
+}

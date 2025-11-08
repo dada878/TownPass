@@ -33,6 +33,9 @@ import 'package:town_pass/page/setting/setting_view_controller.dart';
 import 'package:town_pass/page/subscription/subscription_view.dart';
 import 'package:town_pass/page/suspend_account/suspend_account_controller.dart';
 import 'package:town_pass/page/suspend_account/suspend_account_view.dart';
+import 'package:town_pass/page/sync_test/sync_test_view_controller.dart';
+import 'package:town_pass/page/sync_test/debug_log/debug_log_view.dart';
+import 'package:town_pass/page/sync_test/debug_log/debug_log_view_controller.dart';
 import 'package:town_pass/util/tp_web_view.dart';
 
 abstract class TPRoute {
@@ -59,6 +62,7 @@ abstract class TPRoute {
   static const String subscription = '/subscription';
   static const String suspendAccount = '/suspend_account';
   static const String webView = '/web_view';
+  static const String debugLog = '/debug_log';
 
   static final List<GetPage> page = [
     GetPage(
@@ -67,7 +71,9 @@ abstract class TPRoute {
       binding: BindingsBuilder(() {
         Get
           ..put<MainViewController>(MainViewController())
-          ..put<PinnedServiceWidgetController>(PinnedServiceWidgetController());
+          ..put<PinnedServiceWidgetController>(PinnedServiceWidgetController())
+          ..put<SyncTestViewController>(SyncTestViewController())
+          ..put<DebugLogViewController>(DebugLogViewController());
       }),
     ),
     GetPage(
@@ -184,6 +190,10 @@ abstract class TPRoute {
     GetPage(
       name: activityDetail,
       page: () => const ActivityDetailView(),
+    ),
+    GetPage(
+      name: debugLog,
+      page: () => const DebugLogView(),
     ),
   ];
 
