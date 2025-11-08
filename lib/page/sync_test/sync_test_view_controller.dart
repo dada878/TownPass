@@ -82,6 +82,11 @@ class SyncTestViewController extends GetxController {
   final RxString lastSyncTime = ''.obs;
   final RxInt syncIntervalMs = 2000.obs;
 
+  // 手動定位模式
+  final RxBool isManualLocationMode = false.obs;
+  final RxDouble manualLatitude = 25.033000.obs;  // 台北市預設座標
+  final RxDouble manualLongitude = 121.565400.obs;
+
   Timer? _syncTimer;
   http.Client? _httpClient;
   CancelableOperation? _currentRequest;
@@ -151,6 +156,12 @@ class SyncTestViewController extends GetxController {
   }
 
   Future<void> _getCurrentLocation() async {
+    if (isManualLocationMode.value) {
+      // 使用手動輸入的座標
+      debugPrint('Using manual location: ${manualLatitude.value}, ${manualLongitude.value}');
+      return;
+    }
+
     try {
       final position = await Get.find<GeoLocatorService>().position();
       currentPosition.value = position;
@@ -164,13 +175,27 @@ class SyncTestViewController extends GetxController {
 
     await _getCurrentLocation();
 
-    if (currentPosition.value == null) return;
+    // 在手動模式下，檢查是否有手動座標；在 GPS 模式下，檢查是否有 GPS 座標
+    if (!isManualLocationMode.value && currentPosition.value == null) return;
 
     isSyncing.value = true;
 
+    // 根據模式選擇座標來源
+    final double latitude;
+    final double longitude;
+
+    if (isManualLocationMode.value) {
+      latitude = manualLatitude.value;
+      longitude = manualLongitude.value;
+    } else {
+      latitude = currentPosition.value!.latitude;
+      longitude = currentPosition.value!.longitude;
+    }
+
     final requestData = {
-      'lng': currentPosition.value!.longitude,
-      'lat': currentPosition.value!.latitude,
+      'lng': longitude,
+      'lat': latitude,
+      'type': getModeType(currentMode.value),
     };
     final headers = {'Content-Type': 'application/json'};
     final startTime = DateTime.now();
@@ -209,7 +234,12 @@ class SyncTestViewController extends GetxController {
         Uri.parse(apiEndpoint),
         headers: headers,
         body: jsonEncode(requestData),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw TimeoutException('Request timeout after 5 seconds');
+        },
+      );
 
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
@@ -248,6 +278,28 @@ class SyncTestViewController extends GetxController {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _processMessages(data);
+      }
+    } on TimeoutException {
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+
+      debugPrint('Sync timeout: Request took too long (${duration.inSeconds}s)');
+
+      // 記錄 Timeout Error
+      try {
+        final debugLogController = Get.find<DebugLogViewController>();
+        debugLogController.addLog(
+          DebugLog(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            timestamp: endTime,
+            type: LogType.error,
+            url: apiEndpoint,
+            errorMessage: 'Request timeout after ${duration.inSeconds}s',
+            duration: duration,
+          ),
+        );
+      } catch (logError) {
+        debugPrint('Debug log controller not found: $logError');
       }
     } catch (e) {
       final endTime = DateTime.now();
@@ -529,6 +581,17 @@ class SyncTestViewController extends GetxController {
     }
   }
 
+  String getModeType(UserMode mode) {
+    switch (mode) {
+      case UserMode.pedestrian:
+        return 'human';
+      case UserMode.bicycle:
+        return 'bicycle';
+      case UserMode.vehicle:
+        return 'car';
+    }
+  }
+
   String getPriorityLabel(String priority) {
     switch (priority.toLowerCase()) {
       case 'high':
@@ -540,6 +603,21 @@ class SyncTestViewController extends GetxController {
       default:
         return priority;
     }
+  }
+
+  // 切換定位模式
+  void toggleLocationMode() {
+    isManualLocationMode.value = !isManualLocationMode.value;
+    if (!isManualLocationMode.value) {
+      // 切回 GPS 模式時立即更新位置
+      _getCurrentLocation();
+    }
+  }
+
+  // 更新手動經緯度
+  void updateManualLocation(double latitude, double longitude) {
+    manualLatitude.value = latitude;
+    manualLongitude.value = longitude;
   }
 }
 

@@ -22,23 +22,39 @@ class SyncTestView extends GetView<SyncTestViewController> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // 模式切換區
-          _buildModeSelector(),
-          const Divider(height: 1),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return Column(
+            children: [
+              // 上半部分（可滾動）
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight * 0.6, // 最多佔 60% 高度
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      // 模式切換區
+                      _buildModeSelector(),
+                      const Divider(height: 1),
 
-          // 資訊顯示區
-          _buildInfoSection(),
-          const Divider(height: 1),
+                      // 資訊顯示區
+                      _buildInfoSection(),
+                      const Divider(height: 1),
 
-          // 接收設定區
-          _buildReceiveSettings(),
-          const Divider(height: 1),
+                      // 接收設定區
+                      _buildReceiveSettings(),
+                      const Divider(height: 1),
+                    ],
+                  ),
+                ),
+              ),
 
-          // 訊息列表
-          Expanded(child: _buildMessageList()),
-        ],
+              // 訊息列表
+              Expanded(child: _buildMessageList()),
+            ],
+          );
+        },
       ),
     );
   }
@@ -128,6 +144,119 @@ class SyncTestView extends GetView<SyncTestViewController> {
       color: TPColors.white,
       child: Column(
         children: [
+          // 定位模式開關
+          Obx(() => Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '定位模式',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: TPColors.grayscale700,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        controller.isManualLocationMode.value ? '手動輸入' : 'GPS',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: TPColors.grayscale900,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: controller.isManualLocationMode.value,
+                        onChanged: (_) => controller.toggleLocationMode(),
+                        activeTrackColor: TPColors.primary500,
+                      ),
+                    ],
+                  ),
+                ],
+              )),
+          const SizedBox(height: 8),
+          // 手動輸入經緯度
+          Obx(() => controller.isManualLocationMode.value
+              ? Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            decoration: const InputDecoration(
+                              labelText: '緯度 (Latitude)',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                              signed: true,
+                            ),
+                            controller: TextEditingController(
+                              text: controller.manualLatitude.value.toString(),
+                            )..selection = TextSelection.fromPosition(
+                                TextPosition(
+                                  offset: controller.manualLatitude.value
+                                      .toString()
+                                      .length,
+                                ),
+                              ),
+                            onChanged: (value) {
+                              final lat = double.tryParse(value);
+                              if (lat != null) {
+                                controller.updateManualLocation(
+                                  lat,
+                                  controller.manualLongitude.value,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            decoration: const InputDecoration(
+                              labelText: '經度 (Longitude)',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                              signed: true,
+                            ),
+                            controller: TextEditingController(
+                              text: controller.manualLongitude.value.toString(),
+                            )..selection = TextSelection.fromPosition(
+                                TextPosition(
+                                  offset: controller.manualLongitude.value
+                                      .toString()
+                                      .length,
+                                ),
+                              ),
+                            onChanged: (value) {
+                              final lng = double.tryParse(value);
+                              if (lng != null) {
+                                controller.updateManualLocation(
+                                  controller.manualLatitude.value,
+                                  lng,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                )
+              : const SizedBox.shrink()),
           Obx(() => Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -139,9 +268,11 @@ class SyncTestView extends GetView<SyncTestViewController> {
                     ),
                   ),
                   Text(
-                    controller.currentPosition.value != null
-                        ? '${controller.currentPosition.value!.latitude.toStringAsFixed(4)}, ${controller.currentPosition.value!.longitude.toStringAsFixed(4)}'
-                        : '定位中...',
+                    controller.isManualLocationMode.value
+                        ? '${controller.manualLatitude.value.toStringAsFixed(6)}, ${controller.manualLongitude.value.toStringAsFixed(6)}'
+                        : (controller.currentPosition.value != null
+                            ? '${controller.currentPosition.value!.latitude.toStringAsFixed(6)}, ${controller.currentPosition.value!.longitude.toStringAsFixed(6)}'
+                            : '定位中...'),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
