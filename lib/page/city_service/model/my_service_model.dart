@@ -183,15 +183,15 @@ extension MyServiceIdExt on MyServiceItemId {
               'https://taipei-pass-service.vercel.app/surrounding-service/',
         ),
       MyServiceItemId.syncControl => MyServiceItem(
-          title: '地圖模式選擇',
-          description: 'WebView 地圖模式選擇測試',
+          title: '台北好安行',
+          description: '安全路線規劃、提醒',
           icon: Assets.svg.iconLocationSearch24.svg(),
           category: MyServiceCategory.explore,
           // 開發環境：使用 localhost (模擬器)
           // destinationUrl: 'http://localhost:3000',
           // 或使用電腦 IP（真機測試）- Next.js dev server on port 3000
-          destinationUrl: 'http://169.254.162.46:3001',
-          forceWebViewTitle: '地圖模式選擇',
+          destinationUrl: 'http://192.168.22.73:3001',
+          forceWebViewTitle: '台北好安行',
         ),
       MyServiceItemId.zoo => MyServiceItem(
           title: '愛遊動物園',

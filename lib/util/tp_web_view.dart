@@ -253,9 +253,20 @@ class TPInAppWebView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 設定 WebView 的預設設定，啟用地理定位
+    final settings = initialSettings ?? InAppWebViewSettings(
+      geolocationEnabled: true,
+      mediaPlaybackRequiresUserGesture: false,
+      allowsInlineMediaPlayback: true,
+    );
+
     return InAppWebView(
+      initialSettings: settings,
       onWebViewCreated: (controller) async {
         await controller.addWebMessageListener(TPWebMessageListener.webMessageListener());
+
+        // 註冊 JavaScript Handlers（更可靠的雙向通訊）
+        TPWebMessageListener.registerJavaScriptHandlers(controller);
 
         // 註冊 WebView 到推送服務
         try {
@@ -290,7 +301,6 @@ class TPInAppWebView extends StatelessWidget {
       layoutDirection: layoutDirection,
       initialData: initialData,
       initialFile: initialFile,
-      initialSettings: initialSettings,
       initialUrlRequest: initialUrlRequest,
       initialUserScripts: initialUserScripts,
       pullToRefreshController: pullToRefreshController,

@@ -159,12 +159,39 @@ class SyncTestViewController extends GetxController {
     if (isManualLocationMode.value) {
       // 使用手動輸入的座標
       debugPrint('Using manual location: ${manualLatitude.value}, ${manualLongitude.value}');
+
+      // Push manual location to WebView
+      try {
+        final pushService = Get.find<WebViewPushService>();
+        await pushService.pushLocation(
+          latitude: manualLatitude.value,
+          longitude: manualLongitude.value,
+          isManual: true,
+        );
+        debugPrint('Manual location pushed to WebView');
+      } catch (e) {
+        debugPrint('Failed to push manual location to WebView: $e');
+      }
+
       return;
     }
 
     try {
       final position = await Get.find<GeoLocatorService>().position();
       currentPosition.value = position;
+
+      // Push GPS location to WebView
+      try {
+        final pushService = Get.find<WebViewPushService>();
+        await pushService.pushLocation(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          isManual: false,
+        );
+        debugPrint('GPS location pushed to WebView: ${position.latitude}, ${position.longitude}');
+      } catch (e) {
+        debugPrint('Failed to push GPS location to WebView: $e');
+      }
     } catch (e) {
       debugPrint('Error getting location: $e');
     }
@@ -200,7 +227,33 @@ class SyncTestViewController extends GetxController {
     final headers = {'Content-Type': 'application/json'};
     final startTime = DateTime.now();
 
-    // 記錄 Request
+    // === 詳細 Request 日誌 ===
+    debugPrint('');
+    debugPrint('╔════════════════════════════════════════════════════════════════');
+    debugPrint('║ 🚀 Sending Request');
+    debugPrint('╠════════════════════════════════════════════════════════════════');
+    debugPrint('║ URL: $apiEndpoint');
+    debugPrint('║ Method: PUT');
+    debugPrint('║ Time: ${startTime.toString()}');
+    debugPrint('╠════════════════════════════════════════════════════════════════');
+    debugPrint('║ Headers:');
+    headers.forEach((key, value) {
+      debugPrint('║   $key: $value');
+    });
+    debugPrint('╠════════════════════════════════════════════════════════════════');
+    debugPrint('║ Request Body:');
+    debugPrint('║   {');
+    debugPrint('║     "lng": ${requestData['lng']}');
+    debugPrint('║     "lat": ${requestData['lat']}');
+    debugPrint('║     "type": "${requestData['type']}"');
+    debugPrint('║   }');
+    debugPrint('╠════════════════════════════════════════════════════════════════');
+    debugPrint('║ 定位模式: ${isManualLocationMode.value ? "手動輸入" : "GPS"}');
+    debugPrint('║ 使用者模式: ${getModeLabel(currentMode.value)} (${getModeType(currentMode.value)})');
+    debugPrint('╚════════════════════════════════════════════════════════════════');
+    debugPrint('');
+
+    // 記錄 Request 到 Debug Log Controller
     try {
       final debugLogController = Get.find<DebugLogViewController>();
       debugLogController.addLog(
@@ -246,7 +299,30 @@ class SyncTestViewController extends GetxController {
 
       lastSyncTime.value = DateTime.now().toString().substring(11, 19);
 
-      // 記錄 Response
+      // === 詳細 Response 日誌 ===
+      debugPrint('');
+      debugPrint('╔════════════════════════════════════════════════════════════════');
+      debugPrint('║ ✅ Received Response');
+      debugPrint('╠════════════════════════════════════════════════════════════════');
+      debugPrint('║ Status Code: ${response.statusCode}');
+      debugPrint('║ Duration: ${duration.inMilliseconds}ms');
+      debugPrint('║ Time: ${endTime.toString()}');
+      debugPrint('╠════════════════════════════════════════════════════════════════');
+      debugPrint('║ Response Body:');
+      // 格式化顯示 JSON (如果可以解析)
+      try {
+        final jsonData = jsonDecode(response.body);
+        final prettyJson = const JsonEncoder.withIndent('  ').convert(jsonData);
+        prettyJson.split('\n').forEach((line) {
+          debugPrint('║   $line');
+        });
+      } catch (e) {
+        debugPrint('║   ${response.body}');
+      }
+      debugPrint('╚════════════════════════════════════════════════════════════════');
+      debugPrint('');
+
+      // 記錄 Response 到 Debug Log Controller
       try {
         final debugLogController = Get.find<DebugLogViewController>();
         debugLogController.addLog(
@@ -283,7 +359,17 @@ class SyncTestViewController extends GetxController {
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
 
-      debugPrint('Sync timeout: Request took too long (${duration.inSeconds}s)');
+      // === Timeout Error 日誌 ===
+      debugPrint('');
+      debugPrint('╔════════════════════════════════════════════════════════════════');
+      debugPrint('║ ⏱️  Request Timeout');
+      debugPrint('╠════════════════════════════════════════════════════════════════');
+      debugPrint('║ URL: $apiEndpoint');
+      debugPrint('║ Duration: ${duration.inSeconds}s (${duration.inMilliseconds}ms)');
+      debugPrint('║ Time: ${endTime.toString()}');
+      debugPrint('║ Error: Request timeout after 5 seconds');
+      debugPrint('╚════════════════════════════════════════════════════════════════');
+      debugPrint('');
 
       // 記錄 Timeout Error
       try {
@@ -305,7 +391,19 @@ class SyncTestViewController extends GetxController {
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
 
-      debugPrint('Sync error: $e');
+      // === Error 日誌 ===
+      debugPrint('');
+      debugPrint('╔════════════════════════════════════════════════════════════════');
+      debugPrint('║ ❌ Request Error');
+      debugPrint('╠════════════════════════════════════════════════════════════════');
+      debugPrint('║ URL: $apiEndpoint');
+      debugPrint('║ Duration: ${duration.inMilliseconds}ms');
+      debugPrint('║ Time: ${endTime.toString()}');
+      debugPrint('╠════════════════════════════════════════════════════════════════');
+      debugPrint('║ Error Message:');
+      debugPrint('║   $e');
+      debugPrint('╚════════════════════════════════════════════════════════════════');
+      debugPrint('');
 
       // 記錄 Error
       try {
@@ -618,6 +716,21 @@ class SyncTestViewController extends GetxController {
   void updateManualLocation(double latitude, double longitude) {
     manualLatitude.value = latitude;
     manualLongitude.value = longitude;
+
+    // Push manual location to WebView
+    if (isManualLocationMode.value) {
+      try {
+        final pushService = Get.find<WebViewPushService>();
+        pushService.pushLocation(
+          latitude: latitude,
+          longitude: longitude,
+          isManual: true,
+        );
+        debugPrint('Manual location updated and pushed to WebView: $latitude, $longitude');
+      } catch (e) {
+        debugPrint('Failed to push updated manual location to WebView: $e');
+      }
+    }
   }
 }
 

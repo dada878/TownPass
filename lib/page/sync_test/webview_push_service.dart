@@ -74,6 +74,22 @@ class WebViewPushService extends GetxService {
     await _pushEvent('townpass_state_update', state);
   }
 
+  /// Push a location update event to all registered WebViews
+  Future<void> pushLocation({
+    required double latitude,
+    required double longitude,
+    required bool isManual,
+  }) async {
+    final data = {
+      'latitude': latitude,
+      'longitude': longitude,
+      'isManual': isManual,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    await _pushEvent('townpass_location_update', data);
+  }
+
   /// Internal method to push events to all registered WebViews
   Future<void> _pushEvent(String eventType, dynamic data) async {
     if (_webViewControllers.isEmpty) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -25,6 +26,63 @@ abstract class TPWebMessageListener {
         SyncTestToggleDemoMessageHandler(),
         SyncTestToggleNotificationsMessageHandler(),
       ];
+
+  /// 註冊 JavaScript Handlers（替代 WebMessageListener 的更可靠方式）
+  static void registerJavaScriptHandlers(InAppWebViewController controller) {
+    for (final handler in messageHandler) {
+      controller.addJavaScriptHandler(
+        handlerName: handler.name,
+        callback: (args) async {
+          debugPrint('=== JavaScriptHandler: ${handler.name} ===');
+          debugPrint('Args: $args');
+
+          try {
+            // args is List<dynamic>, 第一個元素是傳入的數據
+            final data = args.isNotEmpty ? args[0] : null;
+
+            // 創建一個 Completer 來獲取回覆
+            final completer = Completer<dynamic>();
+
+            await handler.handle(
+              message: data,
+              sourceOrigin: null, // JavaScriptHandler 不提供 origin
+              isMainFrame: true,
+              onReply: (reply) {
+                debugPrint('=== JavaScriptHandler onReply ===');
+                debugPrint('Reply data: ${reply.data}');
+
+                // 解析 reply.data (JSON string) 並返回
+                try {
+                  final replyData = jsonDecode(reply.data);
+                  debugPrint('Parsed reply data: $replyData');
+                  completer.complete(replyData);
+                } catch (e) {
+                  debugPrint('Error parsing reply: $e');
+                  completer.completeError(e);
+                }
+              },
+            );
+
+            // 等待回覆
+            final result = await completer.future.timeout(
+              const Duration(seconds: 5),
+              onTimeout: () {
+                debugPrint('Handler ${handler.name} timeout');
+                return {'error': 'Timeout'};
+              },
+            );
+
+            debugPrint('Returning result: $result');
+            return result;
+          } catch (e) {
+            debugPrint('Error in JavaScriptHandler ${handler.name}: $e');
+            return {'error': e.toString()};
+          }
+        },
+      );
+    }
+    debugPrint('Registered ${messageHandler.length} JavaScript handlers');
+  }
 
   static WebMessageListener webMessageListener() {
     return WebMessageListener(

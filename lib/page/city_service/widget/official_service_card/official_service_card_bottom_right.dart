@@ -3,6 +3,7 @@ import 'package:town_pass/gen/assets.gen.dart';
 import 'package:town_pass/page/city_service/widget/official_service_card/official_service_card.dart';
 import 'package:town_pass/util/tp_colors.dart';
 import 'package:town_pass/util/tp_text.dart';
+import 'package:town_pass/util/tp_route.dart';
 
 class OfficialServiceCardBottomRight extends OfficialServiceCard {
   const OfficialServiceCardBottomRight({super.key});
@@ -12,7 +13,10 @@ class OfficialServiceCardBottomRight extends OfficialServiceCard {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () async {
-        // TODO: add url
+        await TPRoute.openUri(
+          uri: 'http://192.168.22.73:3001',
+          forceTitle: '台北好安行',
+        );
       },
       child: Container(
         height: constraint.maxWidth,
@@ -49,12 +53,12 @@ class OfficialServiceCardBottomRight extends OfficialServiceCard {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   TPText(
-                    '城市生活',
+                    '台北好安行',
                     style: TPTextStyles.h3SemiBold,
                     color: TPColors.white,
                   ),
                   TPText(
-                    'City Life',
+                    'Peace of Mind',
                     style: TPTextStyles.bodyRegular,
                     color: TPColors.white,
                   ),
